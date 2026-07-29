@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from datetime import date
 
 from fedwatch import (
@@ -19,14 +20,49 @@ from fedwatch import (
 from fedwatch.dashboard import create_fed_path_figure
 
 
+def prompt_window_selection() -> tuple[int, str]:
+    print("\nSelect economic calendar window:")
+    print("  [1] Today")
+    print("  [2] Week (+7 days)")
+    print("  [3] Month (+30 days)")
+    try:
+        choice = input("View data for [1/2/3] (default: 1): ").strip()
+    except EOFError:
+        choice = "1"
+
+    if choice == "2" or choice.lower() == "week":
+        return 7, "Week"
+    if choice == "3" or choice.lower() == "month":
+        return 30, "Month"
+    return 0, "Today"
+
+
 def main():
     parser = argparse.ArgumentParser(description="Fed Watch Engine — Macro Terminal & SMC Playbook")
     parser.add_argument("--months", type=int, default=8, help="Number of months ahead to analyze (default: 8)")
+    parser.add_argument(
+        "--window",
+        choices=["today", "week", "month"],
+        help="Date window for economic calendar (today / week / month)",
+    )
     parser.add_argument("--plot", action="store_true", help="Show interactive Plotly Fed Path chart")
     parser.add_argument("--no-db", action="store_true", help="Disable SQLite snapshot saving")
+    parser.add_argument("--non-interactive", action="store_true", help="Run without interactive prompt")
     args = parser.parse_args()
 
-    print(f"Fetching ZQ futures chain for {args.months} months ahead...")
+    if args.window:
+        if args.window == "week":
+            days_ahead, window_title = 7, "Week"
+        elif args.window == "month":
+            days_ahead, window_title = 30, "Month"
+        else:
+            days_ahead, window_title = 0, "Today"
+    elif args.non_interactive:
+        days_ahead, window_title = 0, "Today"
+    else:
+        days_ahead, window_title = prompt_window_selection()
+
+    print(f"\nFetching ZQ futures chain for {args.months} months ahead...")
     chain = get_full_chain(months_ahead=args.months)
 
     if not chain:
@@ -44,8 +80,8 @@ def main():
     # 1. Compute Fed Funds Bootstrapped Path
     nodes = run_bootstrap(futures_chain=chain, initial_rate=CURRENT_TARGET_MIDPOINT)
 
-    # 2. Fetch & Save Economic News Calendar
-    events = fetch_economic_calendar()
+    # 2. Fetch & Save Economic News Calendar based on window selection
+    events, source_label = fetch_economic_calendar(days_ahead=days_ahead)
 
     if not args.no_db:
         persist_bootstrap_nodes(nodes)
@@ -63,7 +99,7 @@ def main():
         for line in delta_lines:
             print(f"  * {line}")
 
-    print(render_macro_news_block(events))
+    print(render_macro_news_block(events, window_title=window_title, source_label=source_label))
     print(render_script_thoughts_block(bias))
 
     if args.plot:

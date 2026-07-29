@@ -187,3 +187,22 @@ def load_today_events(
             (target_date,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def load_events_in_range(
+    start_date: date,
+    end_date: date,
+    db_path: Path = DEFAULT_DB,
+) -> list[dict]:
+    init_db(db_path)
+    with sqlite3.connect(db_path) as con:
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            """
+            SELECT * FROM economic_events
+            WHERE event_date >= ? AND event_date <= ?
+            ORDER BY event_date, event_time
+            """,
+            (start_date.isoformat(), end_date.isoformat()),
+        ).fetchall()
+    return [dict(r) for r in rows]
