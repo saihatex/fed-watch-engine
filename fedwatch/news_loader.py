@@ -170,10 +170,10 @@ def fetch_economic_calendar(
 
     try:
         scraped_events = scrape_forexfactory_calendar()
-        source_label = "ForexFactory (Live Scraper)"
+        source_label = "ForexFactory (Live Scraper) [Verified Live Stream]"
     except Exception as e:
         scraped_events = []
-        source_label = f"Structured Feed (Fallback: {e})"
+        source_label = f"Sample Data (Fallback Feed: Scraper Exception: {e})"
 
     if not scraped_events:
         # Fallback feed
@@ -235,5 +235,4 @@ def fetch_economic_calendar(
             if ev.currency in currencies and ev.impact in min_impacts:
                 events.append(ev)
 
-    source_label += " [Verified Live Stream]"
     return events, source_label

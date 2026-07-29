@@ -1,3 +1,11 @@
+"""
+bias_engine.py — Market Sentiment Index & Market Divergence Computation.
+
+NOTE ON CALIBRATION:
+  The SentimentIndex score weights (dev * 20.0 for CPI, dev * 0.1 for NFP, etc.)
+  are preliminary heuristics [HEURISTIC BETA] and have not yet been statistically
+  calibrated against multi-year high-frequency tick data.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,11 +22,12 @@ class SentimentIndex:
     hawkish_points: float
     dovish_points: float
     news_surprises: list[tuple[str, float]]
+    currency: str = "USD"
 
     def __str__(self) -> str:
         bar_pos = int((self.score + 100) / 200 * 30)
         bar = "-" * bar_pos + "|" + "-" * (30 - bar_pos)
-        return f"[DOVISH {bar} HAWKISH]  Score: {self.score:+.1f}  ({self.label})"
+        return f"[{self.currency} DOVISH {bar} HAWKISH]  Score: {self.score:+.1f} ({self.label}) [Heuristic Beta]"
 
 
 def _rate_path_contribution(nodes: Sequence[BootstrapNode]) -> tuple[float, float]:
@@ -34,7 +43,14 @@ def _rate_path_contribution(nodes: Sequence[BootstrapNode]) -> tuple[float, floa
 def analyze_sentiment(
     nodes: Sequence[BootstrapNode],
     events: Sequence[EconomicEvent],
+    currency: str = "USD",
 ) -> SentimentIndex:
+    """
+    Computes a preliminary Sentiment Index for a target currency (default USD).
+
+    Filtering: Strictly considers events matching target `currency` (USD for Fed stance)
+    to prevent cross-currency distortion (e.g. ECB EUR events affecting Fed score).
+    """
     fed_hike, fed_cut = _rate_path_contribution(nodes)
 
     hawkish_pts = 0.0
@@ -46,12 +62,16 @@ def analyze_sentiment(
     elif fed_cut > fed_hike:
         dovish_pts += min(fed_cut * 30, 50.0)
 
-    for ev in events:
+    # Strictly filter events by target currency (USD) to avoid currency mixing
+    target_events = [ev for ev in events if ev.currency == currency]
+
+    for ev in target_events:
         if ev.deviation is None:
             continue
         dev = ev.deviation
         name = ev.event_name
 
+        # Preliminary heuristic weights
         if any(k in name for k in ("CPI", "PCE", "PPI", "Inflation")):
             contrib = dev * 20.0
         elif any(k in name for k in ("Payrolls", "NFP", "Employment", "Unemployment")):
@@ -99,6 +119,7 @@ def analyze_sentiment(
         hawkish_points=hawkish_pts,
         dovish_points=dovish_pts,
         news_surprises=surprises,
+        currency=currency,
     )
 
 

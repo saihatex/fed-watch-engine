@@ -48,19 +48,16 @@ def _load_bootstrap(months: int = 8):
     print(" Loading futures data...", end=" ", flush=True)
     initial_rate = get_current_midpoint()
     chain = get_full_chain(months_ahead=months)
+
     if not chain:
-        today = date.today()
-        y, m = today.year, today.month
-        chain = {}
-        for i in range(months):
-            chain[(y, m)] = 96.25 - i * 0.05
-            m += 1
-            if m > 12:
-                m = 1
-                y += 1
-    nodes = run_bootstrap(futures_chain=chain, initial_rate=initial_rate)
-    persist_bootstrap_nodes(nodes)
-    print("done.")
+        print("\n  [WARNING] No live ZQ futures data retrieved from exchange/Yahoo Finance.")
+        print("            Rate path bootstrap cannot be calculated without market quotes.\n")
+        nodes = []
+    else:
+        nodes = run_bootstrap(futures_chain=chain, initial_rate=initial_rate)
+        persist_bootstrap_nodes(nodes)
+        print("done.")
+
     return nodes, initial_rate
 
 
@@ -77,7 +74,7 @@ def _screen_deep_dive(idx: int, events: list, nodes, initial_rate: float):
         _header()
         print(render_event_deep_dive(idx, ev, nodes, history))
 
-        if is_rate_event:
+        if is_rate_event and nodes:
             print()
             print(render_fomc_path_block(nodes, initial_rate))
 
@@ -87,25 +84,28 @@ def _screen_deep_dive(idx: int, events: list, nodes, initial_rate: float):
             return
         elif cmd == "G":
             if is_rate_event:
-                print(" Opening Rate Curve chart in browser...")
-                fig = create_fed_path_figure(nodes, initial_rate)
+                if not nodes:
+                    input(" No futures curve data available for chart. Press Enter.")
+                else:
+                    print(" Opening Rate Curve chart in browser...")
+                    fig = create_fed_path_figure(nodes, initial_rate)
+                    fig.show()
             else:
                 print(f" Opening Actual vs Forecast chart for {ev.event_name}...")
                 fig = create_event_history_figure(ev.event_name, history)
-            fig.show()
+                fig.show()
 
 
 def _screen_news_list(days_ahead: int, window_title: str, nodes, initial_rate: float):
     print(" Fetching calendar...", end=" ", flush=True)
     events, source = fetch_economic_calendar(days_ahead=days_ahead)
     save_economic_events(events)
-    source_short = "ForexFactory"
     print(f"found {len(events)} events.")
 
     while True:
         _clr()
         _header()
-        print(render_event_table(events, window_title, source_short))
+        print(render_event_table(events, window_title, source))
         print()
 
         cmd = _prompt().upper()
@@ -113,9 +113,12 @@ def _screen_news_list(days_ahead: int, window_title: str, nodes, initial_rate: f
         if cmd == "B" or cmd == "":
             return
         elif cmd == "G":
-            print(" Opening Fed Path Rate Curve in browser...")
-            fig = create_fed_path_figure(nodes, initial_rate)
-            fig.show()
+            if not nodes:
+                input(" No futures curve data available for chart. Press Enter.")
+            else:
+                print(" Opening Fed Path Rate Curve in browser...")
+                fig = create_fed_path_figure(nodes, initial_rate)
+                fig.show()
         elif cmd.isdigit():
             idx = int(cmd)
             if 1 <= idx <= len(events):
