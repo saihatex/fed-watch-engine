@@ -98,3 +98,54 @@ def create_fed_path_figure(nodes: list[BootstrapNode], current_rate: float):
     )
 
     return fig
+
+
+def create_event_history_figure(event_name: str, history: list[dict]):
+    try:
+        import plotly.graph_objects as go
+    except ImportError:
+        raise ImportError("Plotly is required. Install via 'pip install plotly'.")
+
+    filtered = [r for r in history if r.get("event_name") == event_name]
+    filtered = sorted(filtered, key=lambda x: x["event_date"])
+
+    dates = [r["event_date"] for r in filtered]
+    actuals = [r.get("actual") for r in filtered]
+    forecasts = [r.get("forecast") for r in filtered]
+
+    unit = filtered[0].get("unit", "") if filtered else ""
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=dates,
+        y=actuals,
+        name=f"Actual ({unit})",
+        marker_color="#60a5fa",
+        text=[f"{v}{unit}" if v is not None else "" for v in actuals],
+        textposition="auto",
+    ))
+
+    fig.add_trace(go.Bar(
+        x=dates,
+        y=forecasts,
+        name=f"Forecast ({unit})",
+        marker_color="#94a3b8",
+        text=[f"{v}{unit}" if v is not None else "" for v in forecasts],
+        textposition="auto",
+    ))
+
+    fig.update_layout(
+        title=f"Historical Releases: {event_name}",
+        xaxis=dict(title="Release Date"),
+        yaxis=dict(title=f"Value ({unit})"),
+        barmode="group",
+        template="plotly_dark",
+        paper_bgcolor="#000000",
+        plot_bgcolor="#0a0a0a",
+        font=dict(family="JetBrains Mono, monospace", color="#e2e8f0"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=50, r=50, t=70, b=50),
+    )
+
+    return fig
