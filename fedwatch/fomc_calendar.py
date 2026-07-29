@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from typing import Sequence
 
 
 @dataclass(frozen=True)
@@ -37,5 +38,21 @@ def next_meeting(as_of: date | None = None) -> FOMCMeeting:
     return min(upcoming, key=lambda m: m.decision_date)
 
 
+def meetings_ahead(n: int, as_of: date | None = None) -> list[FOMCMeeting]:
+    as_of = as_of or date.today()
+    upcoming = sorted(
+        [m for m in ALL_MEETINGS if m.decision_date >= as_of],
+        key=lambda m: m.decision_date,
+    )
+    return upcoming[:n]
+
+
 def meetings_between(start: date, end: date) -> list[FOMCMeeting]:
     return [m for m in ALL_MEETINGS if start <= m.decision_date <= end]
+
+
+def meeting_in_month(year: int, month: int) -> FOMCMeeting | None:
+    for m in ALL_MEETINGS:
+        if m.decision_date.year == year and m.decision_date.month == month:
+            return m
+    return None
