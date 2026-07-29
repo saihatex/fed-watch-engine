@@ -8,97 +8,125 @@ from fedwatch.news_loader import EconomicEvent
 
 
 @dataclass
-class MacroBias:
-    overall_bias: str
-    hawkish_score: float
-    dovish_score: float
-    sentiment_summary: str
-    divergence_warning: str | None
-    smc_playbook: list[str]
+class SentimentIndex:
+    score: float
+    label: str
+    hawkish_points: float
+    dovish_points: float
+    news_surprises: list[tuple[str, float]]
+
+    def __str__(self) -> str:
+        bar_pos = int((self.score + 100) / 200 * 30)
+        bar = "-" * bar_pos + "|" + "-" * (30 - bar_pos)
+        return f"[DOVISH {bar} HAWKISH]  Score: {self.score:+.1f}  ({self.label})"
 
 
-def analyze_macro_bias(
-    nodes: Sequence[BootstrapNode],
-    events: Sequence[EconomicEvent],
-) -> MacroBias:
-    hawkish_points = 0.0
-    dovish_points = 0.0
-
-    # 1. Analyze Fed Funds Rate Path
-    fed_hike_prob = 0.0
-    fed_cut_prob = 0.0
+def _rate_path_contribution(nodes: Sequence[BootstrapNode]) -> tuple[float, float]:
+    hike = 0.0
+    cut = 0.0
     for node in nodes:
         if node.outcomes:
-            fed_hike_prob += node.outcomes.probs.get(25, 0.0) + node.outcomes.probs.get(50, 0.0)
-            fed_cut_prob += node.outcomes.probs.get(-25, 0.0) + node.outcomes.probs.get(-50, 0.0)
+            hike += node.outcomes.probs.get(25, 0.0) + node.outcomes.probs.get(50, 0.0) * 1.5
+            cut += node.outcomes.probs.get(-25, 0.0) + node.outcomes.probs.get(-50, 0.0) * 1.5
+    return hike, cut
 
-    if fed_hike_prob > fed_cut_prob:
-        hawkish_points += 2.0
-        fed_sentiment = f"Fed curve is pricing HAWKISH expectations ({fed_hike_prob*100:.0f}% total hike probability across upcoming meetings)."
-    elif fed_cut_prob > fed_hike_prob:
-        dovish_points += 2.0
-        fed_sentiment = f"Fed curve is pricing DOVISH expectations ({fed_cut_prob*100:.0f}% total cut probability across upcoming meetings)."
-    else:
-        fed_sentiment = "Fed curve is pricing NEUTRAL/STABLE interest rate path."
 
-    # 2. Analyze Macro Economic Events Deviation
-    news_surprises: list[str] = []
-    has_high_impact_usd = False
+def analyze_sentiment(
+    nodes: Sequence[BootstrapNode],
+    events: Sequence[EconomicEvent],
+) -> SentimentIndex:
+    fed_hike, fed_cut = _rate_path_contribution(nodes)
+
+    hawkish_pts = 0.0
+    dovish_pts = 0.0
+    surprises: list[tuple[str, float]] = []
+
+    if fed_hike > fed_cut:
+        hawkish_pts += min(fed_hike * 30, 50.0)
+    elif fed_cut > fed_hike:
+        dovish_pts += min(fed_cut * 30, 50.0)
 
     for ev in events:
-        if ev.impact == "High" and ev.currency == "USD":
-            has_high_impact_usd = True
+        if ev.deviation is None:
+            continue
+        dev = ev.deviation
+        name = ev.event_name
 
-        if ev.deviation is not None:
-            # Positive inflation/growth surprise => Hawkish (USD+)
-            if "CPI" in ev.event_name or "PCE" in ev.event_name or "PPI" in ev.event_name:
-                if ev.deviation > 0:
-                    hawkish_points += 1.5
-                    news_surprises.append(f"{ev.event_name} actual > forecast (+{ev.deviation:.2f}%) -> Inflation pressure")
-                elif ev.deviation < 0:
-                    dovish_points += 1.5
-                    news_surprises.append(f"{ev.event_name} actual < forecast ({ev.deviation:.2f}%) -> Cooling inflation")
+        if any(k in name for k in ("CPI", "PCE", "PPI", "Inflation")):
+            contrib = dev * 20.0
+        elif any(k in name for k in ("Payrolls", "NFP", "Employment", "Unemployment")):
+            contrib = dev * 0.1
+        elif any(k in name for k in ("GDP", "Retail")):
+            contrib = dev * 15.0
+        elif any(k in name for k in ("PMI", "ISM")):
+            contrib = dev * 8.0
+        elif "Rate" in name:
+            contrib = dev * 25.0
+        else:
+            contrib = dev * 5.0
 
-            # Labor Market Surprise (NFP/Payrolls)
-            elif "Payrolls" in ev.event_name or "NFP" in ev.event_name:
-                if ev.deviation > 0:
-                    hawkish_points += 1.5
-                    news_surprises.append(f"{ev.event_name} beat (+{ev.deviation:.0f}K) -> Tight labor market")
-                elif ev.deviation < 0:
-                    dovish_points += 1.5
-                    news_surprises.append(f"{ev.event_name} miss ({ev.deviation:.0f}K) -> Weakening employment")
+        if ev.impact == "Medium":
+            contrib *= 0.6
 
-    # 3. Detect Divergence
-    divergence_warning = None
-    if hawkish_points > dovish_points and fed_cut_prob > 0.5:
-        divergence_warning = "HAWKISH DIVERGENCE: Macro data is hot (inflation/jobs beat), but Fed curve is heavily pricing rate cuts. Expect repricing volatility!"
-    elif dovish_points > hawkish_points and fed_hike_prob > 0.5:
-        divergence_warning = "DOVISH DIVERGENCE: Macro data is cooling (cpi/jobs miss), but Fed curve is pricing rate hikes. Potential dovish pivot ahead."
+        if contrib > 0:
+            hawkish_pts += min(abs(contrib), 25.0)
+        else:
+            dovish_pts += min(abs(contrib), 25.0)
 
-    # 4. Generate SMC (Smart Money Concepts) Playbook
-    smc_playbook: list[str] = []
+        surprises.append((name, round(dev, 4)))
 
-    if has_high_impact_usd:
-        smc_playbook.append("[SMC Alert] High-Impact USD release today: Expect liquidity sweep of Asian High / Asian Low before true directional expansion.")
-        smc_playbook.append("[Execution] Avoid opening positions 15 mins prior to release; watch for 5m FVG (Fair Value Gap) displacement after initial spike.")
+    raw = hawkish_pts - dovish_pts
+    score = max(-100.0, min(100.0, raw))
+
+    if score > 60:
+        label = "Strongly Hawkish"
+    elif score > 25:
+        label = "Hawkish"
+    elif score > 5:
+        label = "Mildly Hawkish"
+    elif score < -60:
+        label = "Strongly Dovish"
+    elif score < -25:
+        label = "Dovish"
+    elif score < -5:
+        label = "Mildly Dovish"
     else:
-        smc_playbook.append("[SMC Alert] Standard volatility environment. Focus on London/NY session Order Blocks and liquidity pools.")
+        label = "Neutral"
 
-    if hawkish_points > dovish_points:
-        overall_bias = "HAWKISH (USD BULLISH)"
-        smc_playbook.append("[Scenario] Bullish USD / Bearish EURUSD: Look for premium array rejections and bearish displacement.")
-    elif dovish_points > hawkish_points:
-        overall_bias = "DOVISH (USD BEARISH)"
-        smc_playbook.append("[Scenario] Bearish USD / Bullish EURUSD: Look for discount array rejections and bullish displacement.")
-    else:
-        overall_bias = "NEUTRAL"
-        smc_playbook.append("[Scenario] Range-bound environment: Trade liquidity sweeps on both sides of the session range.")
-
-    return MacroBias(
-        overall_bias=overall_bias,
-        hawkish_score=hawkish_points,
-        dovish_score=dovish_points,
-        sentiment_summary=fed_sentiment,
-        divergence_warning=divergence_warning,
-        smc_playbook=smc_playbook,
+    return SentimentIndex(
+        score=score,
+        label=label,
+        hawkish_points=hawkish_pts,
+        dovish_points=dovish_pts,
+        news_surprises=surprises,
     )
+
+
+def compute_market_divergence(
+    event: EconomicEvent,
+    nodes: Sequence[BootstrapNode],
+) -> dict:
+    closest_node = None
+    for node in nodes:
+        if node.meeting is not None:
+            closest_node = node
+            break
+
+    result = {
+        "event_name": event.event_name,
+        "forecast": event.forecast,
+        "actual": event.actual,
+        "deviation": event.deviation,
+        "unit": event.unit,
+        "implied_rate": None,
+        "rate_before": None,
+        "market_divergence_bp": None,
+    }
+
+    if closest_node is not None:
+        result["implied_rate"] = closest_node.rate_after
+        result["rate_before"] = closest_node.rate_before
+        if event.deviation is not None and closest_node.rate_after is not None:
+            result["market_divergence_bp"] = round(event.deviation * 100, 2)
+
+    return result

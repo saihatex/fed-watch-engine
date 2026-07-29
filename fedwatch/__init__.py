@@ -12,11 +12,24 @@ from .futures_loader import get_full_chain, get_futures_price, get_futures_price
 from .probability import RateExpectation, rate_move_probability, solve_implied_rate_after
 from .probability_mapper import OutcomeDistribution, map_outcomes
 from .bootstrap import BootstrapNode, run_bootstrap
-from .db import init_db, load_snapshots_for_meeting, load_today_events, load_yesterday, save_economic_events, save_snapshot
+from .db import (
+    init_db,
+    load_events_in_range,
+    load_snapshots_for_meeting,
+    load_today_events,
+    load_yesterday,
+    save_economic_events,
+    save_snapshot,
+)
 from .snapshot import format_delta_report, persist_bootstrap_nodes
 from .news_loader import EconomicEvent, fetch_economic_calendar
-from .bias_engine import MacroBias, analyze_macro_bias
-from .cli import render_macro_news_block, render_script_thoughts_block, render_terminal_summary
+from .bias_engine import SentimentIndex, analyze_sentiment, compute_market_divergence
+from .cli import (
+    render_event_deep_dive,
+    render_event_table,
+    render_fomc_path_block,
+    render_sentiment_block,
+)
 
 __all__ = [
     "RateExpectation",
@@ -41,15 +54,18 @@ __all__ = [
     "save_snapshot",
     "load_snapshots_for_meeting",
     "load_yesterday",
-    "save_economic_events",
     "load_today_events",
+    "load_events_in_range",
+    "save_economic_events",
     "persist_bootstrap_nodes",
     "format_delta_report",
     "EconomicEvent",
     "fetch_economic_calendar",
-    "MacroBias",
-    "analyze_macro_bias",
-    "render_terminal_summary",
-    "render_macro_news_block",
-    "render_script_thoughts_block",
+    "SentimentIndex",
+    "analyze_sentiment",
+    "compute_market_divergence",
+    "render_fomc_path_block",
+    "render_event_table",
+    "render_sentiment_block",
+    "render_event_deep_dive",
 ]

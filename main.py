@@ -1,110 +1,132 @@
 from __future__ import annotations
 
-import argparse
 import sys
-from datetime import date
+from datetime import date, timedelta
 
 from fedwatch import (
     CURRENT_TARGET_MIDPOINT,
-    analyze_macro_bias,
+    analyze_sentiment,
     fetch_economic_calendar,
     format_delta_report,
     get_full_chain,
+    load_events_in_range,
     persist_bootstrap_nodes,
-    render_macro_news_block,
-    render_script_thoughts_block,
-    render_terminal_summary,
+    render_event_deep_dive,
+    render_event_table,
+    render_fomc_path_block,
+    render_sentiment_block,
     run_bootstrap,
     save_economic_events,
 )
 from fedwatch.dashboard import create_fed_path_figure
 
 
-def prompt_window_selection() -> tuple[int, str]:
-    print("\nSelect economic calendar window:")
-    print("  [1] Today")
-    print("  [2] Week (+7 days)")
-    print("  [3] Month (+30 days)")
-    try:
-        choice = input("View data for [1/2/3] (default: 1): ").strip()
-    except EOFError:
-        choice = "1"
+_WINDOW_OPTS = {"1": (0, "Today"), "2": (7, "Week"), "3": (30, "Month")}
 
-    if choice == "2" or choice.lower() == "week":
-        return 7, "Week"
-    if choice == "3" or choice.lower() == "month":
-        return 30, "Month"
-    return 0, "Today"
+
+def _prompt(msg: str) -> str:
+    try:
+        return input(msg).strip()
+    except (EOFError, KeyboardInterrupt):
+        return "0"
+
+
+def _load_bootstrap(months: int = 8):
+    print("Fetching ZQ futures chain...", end=" ", flush=True)
+    chain = get_full_chain(months_ahead=months)
+    if not chain:
+        today = date.today()
+        y, m = today.year, today.month
+        chain = {}
+        for i in range(months):
+            chain[(y, m)] = 96.25 - i * 0.05
+            m += 1
+            if m > 12:
+                m = 1
+                y += 1
+    nodes = run_bootstrap(futures_chain=chain, initial_rate=CURRENT_TARGET_MIDPOINT)
+    print("done.")
+    return nodes
+
+
+def _level3(idx: int, events: list, nodes, db_path):
+    from fedwatch.db import DEFAULT_DB
+    from fedwatch.db import load_events_in_range
+    from datetime import date
+
+    ev = events[idx - 1]
+    today = date.today()
+    start = today - timedelta(days=120)
+    history = load_events_in_range(start, today)
+
+    while True:
+        print(render_event_deep_dive(idx, ev, nodes, history))
+        cmd = _prompt(">> ").upper()
+        if cmd == "B" or cmd == "":
+            break
+
+
+def _level2(days_ahead: int, window_title: str, nodes):
+    from fedwatch.db import DEFAULT_DB
+    from datetime import date
+
+    today = date.today()
+
+    print("Fetching economic calendar...", end=" ", flush=True)
+    events, source = fetch_economic_calendar(days_ahead=days_ahead)
+    save_economic_events(events)
+    print(f"found {len(events)} events.")
+
+    sentiment = analyze_sentiment(nodes, events)
+    delta_lines = format_delta_report(nodes)
+
+    while True:
+        print(render_event_table(events, window_title, source))
+        print(render_sentiment_block(sentiment, delta_lines))
+
+        cmd = _prompt(">> ").upper()
+
+        if cmd == "B" or cmd == "":
+            return
+        elif cmd == "G":
+            print("Opening Plotly Fed Path chart in browser...")
+            fig = create_fed_path_figure(nodes, CURRENT_TARGET_MIDPOINT)
+            fig.show()
+        elif cmd.isdigit():
+            idx = int(cmd)
+            if 1 <= idx <= len(events):
+                _level3(idx, events, nodes, None)
+            else:
+                print(f"  Invalid event number. Enter 1-{len(events)}.")
+        else:
+            print("  Unknown command.")
+
+
+def _level1(nodes):
+    while True:
+        print("\n=================================================================")
+        print(" FED WATCH ENGINE")
+        print("=================================================================")
+        print(" [1] Today    [2] Week (+7 days)    [3] Month (+30 days)    [0] Exit")
+        print("-----------------------------------------------------------------")
+
+        cmd = _prompt(">> ")
+
+        if cmd == "0" or cmd.upper() == "Q":
+            print("Goodbye.")
+            sys.exit(0)
+        elif cmd in _WINDOW_OPTS:
+            days_ahead, window_title = _WINDOW_OPTS[cmd]
+            persist_bootstrap_nodes(nodes)
+            _level2(days_ahead, window_title, nodes)
+        else:
+            print("  Enter 1, 2, 3 or 0.")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Fed Watch Engine — Macro Terminal & SMC Playbook")
-    parser.add_argument("--months", type=int, default=8, help="Number of months ahead to analyze (default: 8)")
-    parser.add_argument(
-        "--window",
-        choices=["today", "week", "month"],
-        help="Date window for economic calendar (today / week / month)",
-    )
-    parser.add_argument("--plot", action="store_true", help="Show interactive Plotly Fed Path chart")
-    parser.add_argument("--no-db", action="store_true", help="Disable SQLite snapshot saving")
-    parser.add_argument("--non-interactive", action="store_true", help="Run without interactive prompt")
-    args = parser.parse_args()
-
-    if args.window:
-        if args.window == "week":
-            days_ahead, window_title = 7, "Week"
-        elif args.window == "month":
-            days_ahead, window_title = 30, "Month"
-        else:
-            days_ahead, window_title = 0, "Today"
-    elif args.non_interactive:
-        days_ahead, window_title = 0, "Today"
-    else:
-        days_ahead, window_title = prompt_window_selection()
-
-    print(f"\nFetching ZQ futures chain for {args.months} months ahead...")
-    chain = get_full_chain(months_ahead=args.months)
-
-    if not chain:
-        print("[fallback] Live futures chain fetch failed or returned empty; generating fallback chain.")
-        today = date.today()
-        cur_y, cur_m = today.year, today.month
-        chain = {}
-        for i in range(args.months):
-            chain[(cur_y, cur_m)] = 96.25 - (i * 0.05)
-            cur_m += 1
-            if cur_m > 12:
-                cur_m = 1
-                cur_y += 1
-
-    # 1. Compute Fed Funds Bootstrapped Path
-    nodes = run_bootstrap(futures_chain=chain, initial_rate=CURRENT_TARGET_MIDPOINT)
-
-    # 2. Fetch & Save Economic News Calendar based on window selection
-    events, source_label = fetch_economic_calendar(days_ahead=days_ahead)
-
-    if not args.no_db:
-        persist_bootstrap_nodes(nodes)
-        save_economic_events(events)
-
-    # 3. Compute Macro Bias & SMC Playbook
-    bias = analyze_macro_bias(nodes, events)
-
-    # 4. Render Terminal Blocks
-    print(render_terminal_summary(nodes, CURRENT_TARGET_MIDPOINT))
-
-    if not args.no_db:
-        print("\n DAILY DELTA REPORT (VS PREVIOUS SNAPSHOT):")
-        delta_lines = format_delta_report(nodes)
-        for line in delta_lines:
-            print(f"  * {line}")
-
-    print(render_macro_news_block(events, window_title=window_title, source_label=source_label))
-    print(render_script_thoughts_block(bias))
-
-    if args.plot:
-        fig = create_fed_path_figure(nodes, CURRENT_TARGET_MIDPOINT)
-        fig.show()
+    nodes = _load_bootstrap()
+    print(render_fomc_path_block(nodes, CURRENT_TARGET_MIDPOINT))
+    _level1(nodes)
 
 
 if __name__ == "__main__":
