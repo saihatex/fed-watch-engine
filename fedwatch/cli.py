@@ -10,8 +10,8 @@ from fedwatch.news_loader import EconomicEvent
 
 def render_fomc_path_block(nodes: list[BootstrapNode], current_rate: float) -> str:
     lines: list[str] = [
-        "=================================================================",
-        " BLOCK 1  |  FED WATCH ENGINE -- FOMC RATE PATH",
+        "==================================================================",
+        " FED WATCH  |  FOMC RATE PATH (ZQ Futures)",
         f" Current target midpoint: {current_rate:.3f}%",
         "-----------------------------------------------------------------",
         f" {'Decision Date':<15} {'Futures':<10} {'Implied Rate':<14} {'Market Pricing'}",
@@ -51,8 +51,8 @@ def render_event_table(events: Sequence[EconomicEvent], window_title: str, sourc
             comp_str = f"{act_str} vs {fc_str}{dev_str} [{ev.status}]"
             lines.append(f" {i:<4} [{ev.impact[0]}]  {ev.currency:<5} {dt_str:<14} {ev.event_name:<30} {comp_str}")
     lines.append("-----------------------------------------------------------------")
-    lines.append(" Type an event # for deep dive | G = Fed Path graph | B = Back")
-    lines.append("-----------------------------------------------------------------")
+    lines.append(" Enter # for deep dive   |   G = Fed Path chart   |   B = Back")
+    lines.append("=================================================================")
     return "\n".join(lines)
 
 
