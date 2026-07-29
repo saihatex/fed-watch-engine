@@ -26,8 +26,13 @@ FOMC_MEETINGS_2026 = [
 ALL_MEETINGS = FOMC_MEETINGS_2026
 
 CURRENT_TARGET_RANGE = (3.50, 3.75)
-CURRENT_TARGET_MIDPOINT = sum(CURRENT_TARGET_RANGE) / 2
+CURRENT_TARGET_MIDPOINT = 3.625
 CURRENT_TARGET_SET_DATE = date(2025, 12, 10)
+
+
+def get_live_target_midpoint() -> float:
+    from fedwatch.rate_fetcher import get_current_midpoint
+    return get_current_midpoint()
 
 
 def next_meeting(as_of: date | None = None) -> FOMCMeeting:

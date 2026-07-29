@@ -3,12 +3,14 @@ from .fomc_calendar import (
     CURRENT_TARGET_MIDPOINT,
     CURRENT_TARGET_RANGE,
     FOMCMeeting,
+    get_live_target_midpoint,
     meeting_in_month,
     meetings_ahead,
     meetings_between,
     next_meeting,
 )
 from .futures_loader import get_full_chain, get_futures_price, get_futures_price_for_meeting
+from .rate_fetcher import get_current_midpoint, get_current_target_range, get_current_target_range_str
 from .probability import RateExpectation, rate_move_probability, solve_implied_rate_after
 from .probability_mapper import OutcomeDistribution, map_outcomes
 from .bootstrap import BootstrapNode, run_bootstrap
@@ -45,6 +47,10 @@ __all__ = [
     "ALL_MEETINGS",
     "CURRENT_TARGET_MIDPOINT",
     "CURRENT_TARGET_RANGE",
+    "get_live_target_midpoint",
+    "get_current_midpoint",
+    "get_current_target_range",
+    "get_current_target_range_str",
     "get_futures_price",
     "get_futures_price_for_meeting",
     "get_full_chain",

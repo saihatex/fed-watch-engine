@@ -5,12 +5,12 @@ import sys
 from datetime import date, timedelta
 
 from fedwatch import (
-    CURRENT_TARGET_MIDPOINT,
     analyze_sentiment,
     create_event_history_figure,
     create_fed_path_figure,
     fetch_economic_calendar,
     format_delta_report,
+    get_current_midpoint,
     get_full_chain,
     load_events_in_range,
     persist_bootstrap_nodes,
@@ -46,6 +46,7 @@ def _header():
 
 def _load_bootstrap(months: int = 8):
     print(" Loading futures data...", end=" ", flush=True)
+    initial_rate = get_current_midpoint()
     chain = get_full_chain(months_ahead=months)
     if not chain:
         today = date.today()
@@ -57,13 +58,13 @@ def _load_bootstrap(months: int = 8):
             if m > 12:
                 m = 1
                 y += 1
-    nodes = run_bootstrap(futures_chain=chain, initial_rate=CURRENT_TARGET_MIDPOINT)
+    nodes = run_bootstrap(futures_chain=chain, initial_rate=initial_rate)
     persist_bootstrap_nodes(nodes)
     print("done.")
-    return nodes
+    return nodes, initial_rate
 
 
-def _screen_deep_dive(idx: int, events: list, nodes):
+def _screen_deep_dive(idx: int, events: list, nodes, initial_rate: float):
     ev = events[idx - 1]
     today = date.today()
     start = today - timedelta(days=365)
@@ -78,7 +79,7 @@ def _screen_deep_dive(idx: int, events: list, nodes):
 
         if is_rate_event:
             print()
-            print(render_fomc_path_block(nodes, CURRENT_TARGET_MIDPOINT))
+            print(render_fomc_path_block(nodes, initial_rate))
 
         print()
         cmd = _prompt().upper()
@@ -87,14 +88,14 @@ def _screen_deep_dive(idx: int, events: list, nodes):
         elif cmd == "G":
             if is_rate_event:
                 print(" Opening Rate Curve chart in browser...")
-                fig = create_fed_path_figure(nodes, CURRENT_TARGET_MIDPOINT)
+                fig = create_fed_path_figure(nodes, initial_rate)
             else:
                 print(f" Opening Actual vs Forecast chart for {ev.event_name}...")
                 fig = create_event_history_figure(ev.event_name, history)
             fig.show()
 
 
-def _screen_news_list(days_ahead: int, window_title: str, nodes):
+def _screen_news_list(days_ahead: int, window_title: str, nodes, initial_rate: float):
     print(" Fetching calendar...", end=" ", flush=True)
     events, source = fetch_economic_calendar(days_ahead=days_ahead)
     save_economic_events(events)
@@ -113,12 +114,12 @@ def _screen_news_list(days_ahead: int, window_title: str, nodes):
             return
         elif cmd == "G":
             print(" Opening Fed Path Rate Curve in browser...")
-            fig = create_fed_path_figure(nodes, CURRENT_TARGET_MIDPOINT)
+            fig = create_fed_path_figure(nodes, initial_rate)
             fig.show()
         elif cmd.isdigit():
             idx = int(cmd)
             if 1 <= idx <= len(events):
-                _screen_deep_dive(idx, events, nodes)
+                _screen_deep_dive(idx, events, nodes, initial_rate)
             else:
                 input(" Invalid number. Press Enter.")
         else:
@@ -126,10 +127,10 @@ def _screen_news_list(days_ahead: int, window_title: str, nodes):
 
 
 def _screen_main_menu():
-    # Ensure database has 12 months historical seed
     seed_historical_macro_data()
 
     nodes = None
+    initial_rate = 3.625
 
     while True:
         _clr()
@@ -146,9 +147,9 @@ def _screen_main_menu():
             if nodes is None:
                 _clr()
                 _header()
-                nodes = _load_bootstrap()
+                nodes, initial_rate = _load_bootstrap()
             days_ahead, window_title = _WINDOW_OPTS[cmd]
-            _screen_news_list(days_ahead, window_title, nodes)
+            _screen_news_list(days_ahead, window_title, nodes, initial_rate)
         else:
             input(" Enter 1, 2, 3 or 0. Press Enter.")
 
