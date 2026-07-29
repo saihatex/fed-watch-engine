@@ -26,3 +26,28 @@ def get_futures_price(year: int, month: int) -> float:
 
 def get_futures_price_for_meeting(decision_date: date) -> float:
     return get_futures_price(decision_date.year, decision_date.month)
+
+
+def get_full_chain(
+    months_ahead: int = 6,
+    start_date: date | None = None,
+) -> dict[tuple[int, int], float]:
+    start = start_date or date.today()
+    cur_year = start.year
+    cur_month = start.month
+
+    chain: dict[tuple[int, int], float] = {}
+
+    for _ in range(months_ahead):
+        try:
+            price = get_futures_price(cur_year, cur_month)
+            chain[(cur_year, cur_month)] = price
+        except Exception:
+            pass
+
+        cur_month += 1
+        if cur_month > 12:
+            cur_month = 1
+            cur_year += 1
+
+    return chain
