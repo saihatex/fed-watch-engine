@@ -4,6 +4,8 @@ import sqlite3
 from datetime import date
 from pathlib import Path
 
+from fedwatch.news_loader import EconomicEvent
+
 DEFAULT_DB = Path(__file__).parent.parent / "fedwatch.db"
 
 
@@ -36,6 +38,20 @@ def init_db(db_path: Path = DEFAULT_DB) -> None:
                 rate_before    REAL NOT NULL,
                 rate_after     REAL NOT NULL,
                 actual_move_bp INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS economic_events (
+                event_id     TEXT PRIMARY KEY,
+                event_date   TEXT NOT NULL,
+                event_time   TEXT,
+                currency     TEXT NOT NULL,
+                event_name   TEXT NOT NULL,
+                impact       TEXT NOT NULL,
+                forecast     REAL,
+                actual       REAL,
+                previous     REAL,
+                unit         TEXT,
+                deviation    REAL
             );
         """)
 
@@ -127,3 +143,47 @@ def record_fomc_event(
             """,
             (decision_date.isoformat(), rate_before, rate_after, actual_move_bp),
         )
+
+
+def save_economic_events(
+    events: list[EconomicEvent],
+    db_path: Path = DEFAULT_DB,
+) -> None:
+    init_db(db_path)
+    with sqlite3.connect(db_path) as con:
+        for ev in events:
+            con.execute(
+                """
+                INSERT OR REPLACE INTO economic_events
+                    (event_id, event_date, event_time, currency, event_name, impact, forecast, actual, previous, unit, deviation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ev.event_id,
+                    ev.event_date.isoformat(),
+                    ev.event_time,
+                    ev.currency,
+                    ev.event_name,
+                    ev.impact,
+                    ev.forecast,
+                    ev.actual,
+                    ev.previous,
+                    ev.unit,
+                    ev.deviation,
+                ),
+            )
+
+
+def load_today_events(
+    today: date | None = None,
+    db_path: Path = DEFAULT_DB,
+) -> list[dict]:
+    init_db(db_path)
+    target_date = (today or date.today()).isoformat()
+    with sqlite3.connect(db_path) as con:
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            "SELECT * FROM economic_events WHERE event_date = ? ORDER BY event_time",
+            (target_date,),
+        ).fetchall()
+    return [dict(r) for r in rows]
