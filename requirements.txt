@@ -1,5 +1,6 @@
 yfinance>=0.2.40
-matplotlib>=3.7
 pandas>=2.0
 plotly>=5.18
 pytest>=7.4
+rich>=13.0
+

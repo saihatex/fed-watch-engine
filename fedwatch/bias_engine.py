@@ -27,7 +27,9 @@ class SentimentIndex:
     def __str__(self) -> str:
         bar_pos = int((self.score + 100) / 200 * 30)
         bar = "-" * bar_pos + "|" + "-" * (30 - bar_pos)
-        return f"[{self.currency} DOVISH {bar} HAWKISH]  Score: {self.score:+.1f} ({self.label}) [Heuristic Beta]"
+        return f"[{self.currency} DOVISH {bar} HAWKISH]  Score: {self.score:+.1f} ({self.label})"
+
+
 
 
 def _rate_path_contribution(nodes: Sequence[BootstrapNode]) -> tuple[float, float]:

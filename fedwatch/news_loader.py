@@ -170,7 +170,7 @@ def fetch_economic_calendar(
 
     try:
         scraped_events = scrape_forexfactory_calendar()
-        source_label = "ForexFactory (Live Scraper) [Verified Live Stream]"
+        source_label = "ForexFactory (Live Scraper)"
     except Exception as e:
         scraped_events = []
         source_label = f"Sample Data (Fallback Feed: Scraper Exception: {e})"

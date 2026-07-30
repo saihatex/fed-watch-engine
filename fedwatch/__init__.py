@@ -33,7 +33,6 @@ from .cli import (
     render_sentiment_block,
 )
 from .dashboard import create_event_history_figure, create_fed_path_figure
-from .backfiller import seed_historical_macro_data
 
 __all__ = [
     "RateExpectation",
@@ -78,5 +77,5 @@ __all__ = [
     "render_event_deep_dive",
     "create_fed_path_figure",
     "create_event_history_figure",
-    "seed_historical_macro_data",
 ]
+

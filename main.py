@@ -4,6 +4,9 @@ import os
 import sys
 from datetime import date, timedelta
 
+from rich.console import Console
+from rich.panel import Panel
+
 from fedwatch import (
     analyze_sentiment,
     create_event_history_figure,
@@ -20,9 +23,9 @@ from fedwatch import (
     render_sentiment_block,
     run_bootstrap,
     save_economic_events,
-    seed_historical_macro_data,
 )
 
+console = Console(width=95)
 
 _WINDOW_OPTS = {"1": (0, "Today"), "2": (7, "Week"), "3": (30, "Month")}
 
@@ -39,24 +42,27 @@ def _prompt(msg: str = ">> ") -> str:
 
 
 def _header():
-    print("=================================================================")
-    print(" WATCH ENGINE v2.2")
-    print("=================================================================")
+    header_panel = Panel(
+        "[bold cyan]MACRO WATCH ENGINE[/bold cyan]",
+        subtitle="[dim]Fed Path & Macro Analytics[/dim]",
+        border_style="cyan",
+    )
+    console.print(header_panel)
 
 
 def _load_bootstrap(months: int = 8):
-    print(" Loading futures data...", end=" ", flush=True)
+    console.print(" [cyan]Loading ZQ futures data...[/cyan]", end=" ", flush=True)
     initial_rate = get_current_midpoint()
     chain = get_full_chain(months_ahead=months)
 
     if not chain:
-        print("\n  [WARNING] No live ZQ futures data retrieved from exchange/Yahoo Finance.")
-        print("            Rate path bootstrap cannot be calculated without market quotes.\n")
+        console.print("\n  [bold yellow][WARNING][/bold yellow] No live ZQ futures data retrieved.")
+        console.print("            Rate path bootstrap cannot be calculated without market quotes.\n")
         nodes = []
     else:
         nodes = run_bootstrap(futures_chain=chain, initial_rate=initial_rate)
         persist_bootstrap_nodes(nodes)
-        print("done.")
+        console.print("[bold green]done.[/bold green]")
 
     return nodes, initial_rate
 
@@ -72,13 +78,13 @@ def _screen_deep_dive(idx: int, events: list, nodes, initial_rate: float):
     while True:
         _clr()
         _header()
-        print(render_event_deep_dive(idx, ev, nodes, history))
+        console.print(render_event_deep_dive(idx, ev, nodes, history))
 
         if is_rate_event and nodes:
-            print()
-            print(render_fomc_path_block(nodes, initial_rate))
+            console.print()
+            console.print(render_fomc_path_block(nodes, initial_rate))
 
-        print()
+        console.print()
         cmd = _prompt().upper()
         if cmd == "B" or cmd == "":
             return
@@ -87,26 +93,26 @@ def _screen_deep_dive(idx: int, events: list, nodes, initial_rate: float):
                 if not nodes:
                     input(" No futures curve data available for chart. Press Enter.")
                 else:
-                    print(" Opening Rate Curve chart in browser...")
+                    console.print(" Opening Rate Curve chart in browser...")
                     fig = create_fed_path_figure(nodes, initial_rate)
                     fig.show()
             else:
-                print(f" Opening Actual vs Forecast chart for {ev.event_name}...")
+                console.print(f" Opening Actual vs Forecast chart for {ev.event_name}...")
                 fig = create_event_history_figure(ev.event_name, history)
                 fig.show()
 
 
 def _screen_news_list(days_ahead: int, window_title: str, nodes, initial_rate: float):
-    print(" Fetching calendar...", end=" ", flush=True)
+    console.print(" [cyan]Fetching calendar...[/cyan]", end=" ", flush=True)
     events, source = fetch_economic_calendar(days_ahead=days_ahead)
     save_economic_events(events)
-    print(f"found {len(events)} events.")
+    console.print(f"[bold green]found {len(events)} events.[/bold green]")
 
     while True:
         _clr()
         _header()
-        print(render_event_table(events, window_title, source))
-        print()
+        console.print(render_event_table(events, window_title, source))
+        console.print()
 
         cmd = _prompt().upper()
 
@@ -116,7 +122,7 @@ def _screen_news_list(days_ahead: int, window_title: str, nodes, initial_rate: f
             if not nodes:
                 input(" No futures curve data available for chart. Press Enter.")
             else:
-                print(" Opening Fed Path Rate Curve in browser...")
+                console.print(" Opening Fed Path Rate Curve in browser...")
                 fig = create_fed_path_figure(nodes, initial_rate)
                 fig.show()
         elif cmd.isdigit():
@@ -130,21 +136,26 @@ def _screen_news_list(days_ahead: int, window_title: str, nodes, initial_rate: f
 
 
 def _screen_main_menu():
-    seed_historical_macro_data()
-
     nodes = None
     initial_rate = 3.625
 
     while True:
         _clr()
         _header()
-        print(" [1] Today    [2] Week (+7 days)    [3] Month (+30 days)    [0] Exit")
-        print("-----------------------------------------------------------------")
+        menu_panel = Panel(
+            " [bold yellow][1][/bold yellow] Today    "
+            "[bold yellow][2][/bold yellow] Week (+7 days)    "
+            "[bold yellow][3][/bold yellow] Month (+30 days)    "
+            "[bold yellow][0][/bold yellow] Exit",
+            title="[bold white]MAIN MENU[/bold white]",
+            border_style="blue",
+        )
+        console.print(menu_panel)
         cmd = _prompt()
 
         if cmd == "0" or cmd.upper() == "Q":
             _clr()
-            print("Goodbye.")
+            console.print("[bold cyan]Goodbye.[/bold cyan]")
             sys.exit(0)
         elif cmd in _WINDOW_OPTS:
             if nodes is None:
