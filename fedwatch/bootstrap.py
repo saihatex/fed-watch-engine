@@ -43,8 +43,6 @@ def run_bootstrap(
             next_m = 1 if month == 12 else month + 1
             next_has_meeting = meeting_in_month(next_y, next_m) is not None
 
-            # CME standard: if meeting is within 3 days of month end and next month has no meeting,
-            # use next month's contract to avoid N / days_after noise amplification.
             if days_after <= 3 and (next_y, next_m) in futures_chain and not next_has_meeting:
                 next_price = futures_chain[(next_y, next_m)]
                 rate_after = 100.0 - next_price

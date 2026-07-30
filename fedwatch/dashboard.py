@@ -78,7 +78,7 @@ def create_fed_path_figure(nodes: list[BootstrapNode], current_rate: float):
     ))
 
     fig.update_layout(
-        title="Market-Implied Fed Funds Rate Path",
+        title="Fed rate path",
         xaxis=dict(title="FOMC Decision Date"),
         yaxis=dict(title="Implied Rate (%)", side="left"),
         yaxis2=dict(
@@ -136,7 +136,7 @@ def create_event_history_figure(event_name: str, history: list[dict]):
     ))
 
     fig.update_layout(
-        title=f"Historical Releases: {event_name}",
+        title=f"History: {event_name}",
         xaxis=dict(title="Release Date"),
         yaxis=dict(title=f"Value ({unit})"),
         barmode="group",

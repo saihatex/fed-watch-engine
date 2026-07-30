@@ -1,9 +1,3 @@
-"""
-rate_fetcher.py — Verified Target Rate & Range retrieval.
-
-Uses an independent, confirmed source of truth (FOMC decision records / SQLite cache / explicit target setting).
-Does NOT infer current rate from ZQ futures to prevent circular logic in bootstrap equations.
-"""
 from __future__ import annotations
 
 import sqlite3
@@ -13,8 +7,6 @@ from pathlib import Path
 _CONFIRMED_LOWER = 3.50
 _CONFIRMED_UPPER = 3.75
 
-
-# ── SQLite Cache / Local Record ──────────────────────────────────────────────
 
 def _ensure_table(conn: sqlite3.Connection) -> None:
     conn.execute("""
@@ -28,7 +20,6 @@ def _ensure_table(conn: sqlite3.Connection) -> None:
 
 
 def set_confirmed_target_range(lower: float, upper: float, set_date: date | None = None, db_path: Path | None = None) -> None:
-    """Manually record/confirm a newly decided target range in SQLite."""
     from fedwatch.db import DEFAULT_DB
     db = db_path or DEFAULT_DB
     dt_str = (set_date or date.today()).isoformat()
@@ -44,7 +35,6 @@ def set_confirmed_target_range(lower: float, upper: float, set_date: date | None
 
 
 def load_confirmed_target_range(db_path: Path | None = None) -> tuple[float, float] | None:
-    """Load confirmed target range from SQLite storage if present."""
     from fedwatch.db import DEFAULT_DB
     db = db_path or DEFAULT_DB
     try:
@@ -61,14 +51,7 @@ def load_confirmed_target_range(db_path: Path | None = None) -> tuple[float, flo
     return None
 
 
-# ── Public API ───────────────────────────────────────────────────────────────
-
 def get_current_target_range(db_path: Path | None = None) -> tuple[float, float]:
-    """
-    Returns verified FOMC target range:
-      1. Confirmed record from SQLite DB
-      2. Independent static anchor (3.50, 3.75)
-    """
     confirmed = load_confirmed_target_range(db_path)
     if confirmed is not None:
         return confirmed

@@ -8,11 +8,9 @@ from rich.console import Console
 from rich.panel import Panel
 
 from fedwatch import (
-    analyze_sentiment,
     create_event_history_figure,
     create_fed_path_figure,
     fetch_economic_calendar,
-    format_delta_report,
     get_current_midpoint,
     get_full_chain,
     load_events_in_range,
@@ -20,7 +18,6 @@ from fedwatch import (
     render_event_deep_dive,
     render_event_table,
     render_fomc_path_block,
-    render_sentiment_block,
     run_bootstrap,
     save_economic_events,
 )
@@ -34,7 +31,7 @@ def _clr():
     os.system("cls" if os.name == "nt" else "clear")
 
 
-def _prompt(msg: str = ">> ") -> str:
+def _prompt(msg: str = "> ") -> str:
     try:
         return input(msg).strip()
     except (EOFError, KeyboardInterrupt):
@@ -42,27 +39,22 @@ def _prompt(msg: str = ">> ") -> str:
 
 
 def _header():
-    header_panel = Panel(
-        "[bold cyan]MACRO WATCH ENGINE[/bold cyan]",
-        subtitle="[dim]Fed Path & Macro Analytics[/dim]",
-        border_style="cyan",
-    )
-    console.print(header_panel)
+    console.print(Panel("Macro Watch", border_style="white"))
 
 
 def _load_bootstrap(months: int = 8):
-    console.print(" [cyan]Loading ZQ futures data...[/cyan]", end=" ", flush=True)
+    console.print("Loading ZQ futures...", end=" ")
+    console.file.flush()
     initial_rate = get_current_midpoint()
     chain = get_full_chain(months_ahead=months)
 
     if not chain:
-        console.print("\n  [bold yellow][WARNING][/bold yellow] No live ZQ futures data retrieved.")
-        console.print("            Rate path bootstrap cannot be calculated without market quotes.\n")
+        console.print("\nNo ZQ data. Rate path unavailable.\n")
         nodes = []
     else:
         nodes = run_bootstrap(futures_chain=chain, initial_rate=initial_rate)
         persist_bootstrap_nodes(nodes)
-        console.print("[bold green]done.[/bold green]")
+        console.print("ok")
 
     return nodes, initial_rate
 
@@ -86,27 +78,24 @@ def _screen_deep_dive(idx: int, events: list, nodes, initial_rate: float):
 
         console.print()
         cmd = _prompt().upper()
-        if cmd == "B" or cmd == "":
+        if cmd in ("B", ""):
             return
-        elif cmd == "G":
+        if cmd == "G":
             if is_rate_event:
                 if not nodes:
-                    input(" No futures curve data available for chart. Press Enter.")
+                    input("No futures data. Enter.")
                 else:
-                    console.print(" Opening Rate Curve chart in browser...")
-                    fig = create_fed_path_figure(nodes, initial_rate)
-                    fig.show()
+                    create_fed_path_figure(nodes, initial_rate).show()
             else:
-                console.print(f" Opening Actual vs Forecast chart for {ev.event_name}...")
-                fig = create_event_history_figure(ev.event_name, history)
-                fig.show()
+                create_event_history_figure(ev.event_name, history).show()
 
 
 def _screen_news_list(days_ahead: int, window_title: str, nodes, initial_rate: float):
-    console.print(" [cyan]Fetching calendar...[/cyan]", end=" ", flush=True)
+    console.print("Fetching calendar...", end=" ")
+    console.file.flush()
     events, source = fetch_economic_calendar(days_ahead=days_ahead)
     save_economic_events(events)
-    console.print(f"[bold green]found {len(events)} events.[/bold green]")
+    console.print(f"{len(events)} events")
 
     while True:
         _clr()
@@ -116,23 +105,21 @@ def _screen_news_list(days_ahead: int, window_title: str, nodes, initial_rate: f
 
         cmd = _prompt().upper()
 
-        if cmd == "B" or cmd == "":
+        if cmd in ("B", ""):
             return
-        elif cmd == "G":
+        if cmd == "G":
             if not nodes:
-                input(" No futures curve data available for chart. Press Enter.")
+                input("No futures data. Enter.")
             else:
-                console.print(" Opening Fed Path Rate Curve in browser...")
-                fig = create_fed_path_figure(nodes, initial_rate)
-                fig.show()
+                create_fed_path_figure(nodes, initial_rate).show()
         elif cmd.isdigit():
             idx = int(cmd)
             if 1 <= idx <= len(events):
                 _screen_deep_dive(idx, events, nodes, initial_rate)
             else:
-                input(" Invalid number. Press Enter.")
+                input("Invalid. Enter.")
         else:
-            input(" Unknown command. Press Enter.")
+            input("Unknown command. Enter.")
 
 
 def _screen_main_menu():
@@ -142,22 +129,17 @@ def _screen_main_menu():
     while True:
         _clr()
         _header()
-        menu_panel = Panel(
-            " [bold yellow][1][/bold yellow] Today    "
-            "[bold yellow][2][/bold yellow] Week (+7 days)    "
-            "[bold yellow][3][/bold yellow] Month (+30 days)    "
-            "[bold yellow][0][/bold yellow] Exit",
-            title="[bold white]MAIN MENU[/bold white]",
-            border_style="blue",
-        )
-        console.print(menu_panel)
+        console.print(Panel(
+            "[1] Today\n[2] Week\n[3] Month\n[0] Exit",
+            title="Menu",
+            border_style="white",
+        ))
         cmd = _prompt()
 
-        if cmd == "0" or cmd.upper() == "Q":
+        if cmd in ("0", "q", "Q"):
             _clr()
-            console.print("[bold cyan]Goodbye.[/bold cyan]")
             sys.exit(0)
-        elif cmd in _WINDOW_OPTS:
+        if cmd in _WINDOW_OPTS:
             if nodes is None:
                 _clr()
                 _header()
@@ -165,7 +147,7 @@ def _screen_main_menu():
             days_ahead, window_title = _WINDOW_OPTS[cmd]
             _screen_news_list(days_ahead, window_title, nodes, initial_rate)
         else:
-            input(" Enter 1, 2, 3 or 0. Press Enter.")
+            input("Enter 1, 2, 3 or 0. ")
 
 
 def main():

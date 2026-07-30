@@ -1,11 +1,3 @@
-"""
-bias_engine.py — Market Sentiment Index & Market Divergence Computation.
-
-NOTE ON CALIBRATION:
-  The SentimentIndex score weights (dev * 20.0 for CPI, dev * 0.1 for NFP, etc.)
-  are preliminary heuristics [HEURISTIC BETA] and have not yet been statistically
-  calibrated against multi-year high-frequency tick data.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -25,11 +17,7 @@ class SentimentIndex:
     currency: str = "USD"
 
     def __str__(self) -> str:
-        bar_pos = int((self.score + 100) / 200 * 30)
-        bar = "-" * bar_pos + "|" + "-" * (30 - bar_pos)
-        return f"[{self.currency} DOVISH {bar} HAWKISH]  Score: {self.score:+.1f} ({self.label})"
-
-
+        return f"{self.currency} sentiment {self.score:+.1f} ({self.label})"
 
 
 def _rate_path_contribution(nodes: Sequence[BootstrapNode]) -> tuple[float, float]:
@@ -47,12 +35,6 @@ def analyze_sentiment(
     events: Sequence[EconomicEvent],
     currency: str = "USD",
 ) -> SentimentIndex:
-    """
-    Computes a preliminary Sentiment Index for a target currency (default USD).
-
-    Filtering: Strictly considers events matching target `currency` (USD for Fed stance)
-    to prevent cross-currency distortion (e.g. ECB EUR events affecting Fed score).
-    """
     fed_hike, fed_cut = _rate_path_contribution(nodes)
 
     hawkish_pts = 0.0
@@ -64,7 +46,6 @@ def analyze_sentiment(
     elif fed_cut > fed_hike:
         dovish_pts += min(fed_cut * 30, 50.0)
 
-    # Strictly filter events by target currency (USD) to avoid currency mixing
     target_events = [ev for ev in events if ev.currency == currency]
 
     for ev in target_events:
@@ -73,7 +54,6 @@ def analyze_sentiment(
         dev = ev.deviation
         name = ev.event_name
 
-        # Preliminary heuristic weights
         if any(k in name for k in ("CPI", "PCE", "PPI", "Inflation")):
             contrib = dev * 20.0
         elif any(k in name for k in ("Payrolls", "NFP", "Employment", "Unemployment")):
