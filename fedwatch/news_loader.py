@@ -75,8 +75,25 @@ def _slugify(text: str) -> str:
     return re.sub(r"[-\s]+", "_", slug)
 
 
-def scrape_forexfactory_calendar() -> list[EconomicEvent]:
-    url = "https://www.forexfactory.com/calendar"
+def _month_param(target_month: date) -> str:
+    return f"{target_month.strftime('%b').lower()}.{target_month.year}"
+
+
+def _months_in_range(start: date, end: date) -> list[date]:
+    months: list[date] = []
+    y, m = start.year, start.month
+    while (y, m) <= (end.year, end.month):
+        months.append(date(y, m, 1))
+        if m == 12:
+            y, m = y + 1, 1
+        else:
+            m += 1
+    return months
+
+
+def scrape_forexfactory_calendar(target_month: date) -> list[EconomicEvent]:
+    month_param = _month_param(target_month)
+    url = f"https://www.forexfactory.com/calendar?month={month_param}"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -92,7 +109,7 @@ def scrape_forexfactory_calendar() -> list[EconomicEvent]:
 
     events: list[EconomicEvent] = []
     current_date_str = ""
-    current_year = date.today().year
+    parse_year = target_month.year
 
     for row in rows:
         date_td = row.find("td", class_=re.compile(r"calendar__date"))
@@ -130,9 +147,9 @@ def scrape_forexfactory_calendar() -> list[EconomicEvent]:
         tm = time_td.text.strip() if time_td else ""
 
         try:
-            ev_date = datetime.strptime(f"{current_year} {current_date_str}", "%Y %a %b %d").date()
+            ev_date = datetime.strptime(f"{parse_year} {current_date_str}", "%Y %a %b %d").date()
         except ValueError:
-            ev_date = date.today()
+            continue
 
         act_val, act_unit = _parse_num(act_raw)
         fc_val, fc_unit = _parse_num(fc_raw)
@@ -159,6 +176,26 @@ def scrape_forexfactory_calendar() -> list[EconomicEvent]:
     return events
 
 
+def _scrape_months(months: list[date]) -> tuple[list[EconomicEvent], list[str]]:
+    scraped: list[EconomicEvent] = []
+    scraped_labels: list[str] = []
+    seen_ids: set[str] = set()
+
+    for month in months:
+        label = _month_param(month)
+        try:
+            month_events = scrape_forexfactory_calendar(month)
+        except Exception:
+            continue
+        scraped_labels.append(label)
+        for ev in month_events:
+            if ev.event_id not in seen_ids:
+                seen_ids.add(ev.event_id)
+                scraped.append(ev)
+
+    return scraped, scraped_labels
+
+
 def fetch_economic_calendar(
     days_ahead: int = 0,
     start_date: date | None = None,
@@ -167,11 +204,17 @@ def fetch_economic_calendar(
 ) -> tuple[list[EconomicEvent], str]:
     today = start_date or date.today()
     end_date = today + timedelta(days=days_ahead)
+    months = _months_in_range(today, end_date)
 
-    try:
-        scraped_events = scrape_forexfactory_calendar()
-        source_label = "ForexFactory"
-    except Exception:
+    scraped_events, scraped_labels = _scrape_months(months)
+
+    if scraped_labels:
+        months_str = ", ".join(scraped_labels)
+        source_label = (
+            f"ForexFactory | scraped: {months_str} | "
+            f"window: {today.isoformat()}..{end_date.isoformat()}"
+        )
+    else:
         scraped_events = []
         source_label = "sample data"
 
@@ -233,5 +276,8 @@ def fetch_economic_calendar(
         if today <= ev.event_date <= end_date:
             if ev.currency in currencies and ev.impact in min_impacts:
                 events.append(ev)
+
+    if scraped_labels and not events:
+        source_label += " | no events matched filter"
 
     return events, source_label

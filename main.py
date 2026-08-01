@@ -96,6 +96,7 @@ def _screen_news_list(days_ahead: int, window_title: str, nodes, initial_rate: f
     events, source = fetch_economic_calendar(days_ahead=days_ahead)
     save_economic_events(events)
     console.print(f"{len(events)} events")
+    console.print(source)
 
     while True:
         _clr()
